@@ -48,16 +48,29 @@ function commitWork(fiber) {
     return;
   }
 
-  const parentDOM = fiber.parent.dom;
+  let domParentFiber = fiber.parent;
+  while (!domParentFiber.dom) {
+    domParentFiber = domParentFiber.parent;
+  }
+  const parentDOM = domParentFiber.dom;
+
   if (fiber.effectTag === "PLACEMENT" && fiber.dom) {
     parentDOM.append(fiber.dom);
   } else if (fiber.effectTag === "DELETION" && fiber.dom) {
-    parentDOM.removeChild(fiber.dom);
+    commitDeletion(fiber, parentDOM);
   } else if (fiber.effectTag === "UPDATE" && fiber.dom) {
     updateDOM(fiber.dom, fiber.alternate.props, fiber.props);
   }
   commitWork(fiber.child);
   commitWork(fiber.sibling);
+}
+
+function commitDeletion(fiber, domParent) {
+  if (fiber.dom) {
+    domParent.removeChild(fiber.dom);
+  } else {
+    commitDeletion(fiber.child, domParent);
+  }
 }
 
 function updateDOM(dom, prevProps, nextProps) {
@@ -119,15 +132,12 @@ function workLoop(deadline) {
 requestIdleCallback(workLoop);
 
 function performUnitOfWork(fiber) {
-  //创建DOM元素
-  if (!fiber.dom) {
-    fiber.dom = createDOM(fiber);
+  const isFunctionComponent = fiber.type instanceof Function;
+  if (isFunctionComponent) {
+    updateFunctionComponent(fiber);
+  } else {
+    updateHostComponent(fiber);
   }
-
-  //给children新建fiber
-  const elements = fiber.props.children;
-  //新建newFiber，构建fiber
-  reconcileChildren(fiber, elements);
 
   //返回下一个fiber
   if (fiber.child) {
@@ -140,6 +150,24 @@ function performUnitOfWork(fiber) {
     }
     nextFiber = nextFiber.parent;
   }
+}
+
+//处理非函数式组件
+function updateHostComponent(fiber) {
+  //创建DOM元素
+  if (!fiber.dom) {
+    fiber.dom = createDOM(fiber);
+  }
+  //给children新建fiber
+  const elements = fiber.props.children;
+  //新建newFiber，构建fiber
+  reconcileChildren(fiber, elements);
+}
+
+//处理函数式组件
+function updateFunctionComponent(fiber) {
+  const children = [fiber.type(fiber.props)];
+  reconcileChildren(fiber, children);
 }
 
 function reconcileChildren(wipFiber, elements) {
