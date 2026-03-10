@@ -1,17 +1,29 @@
-function render(element, container) {
+function createDOM(fiber) {
   //创建元素
   const dom =
-    element.type === "TEXT_ELEMENT"
+    fiber.type === "TEXT_ELEMENT"
       ? document.createTextNode("")
-      : document.createElement(element.type);
+      : document.createElement(fiber.type);
 
   //赋予属性
-  Object.keys(element.props)
+  Object.keys(fiber.props)
     .filter((key) => key !== "children")
-    .forEach((key) => (dom[key] = element.props[key]));
+    .forEach((key) => (dom[key] = fiber.props[key]));
 
-  //追加到父节点
-  container.append(dom);
+  return dom;
+}
+
+//发出第一个fiber, root fiber
+function render(element, container) {
+  nextUnitofWork = {
+    dom: container,
+    props: {
+      children: [element],
+    },
+    sibling: null,
+    child: null,
+    parent: null,
+  };
 }
 let nextUnitofWork = null;
 
@@ -34,6 +46,52 @@ function workLoop(deadline) {
 // 第一次请求
 requestIdleCallback(workLoop);
 
-function performUnitOfWork(work) {}
+function performUnitOfWork(fiber) {
+  //创建DOM元素
+  if (!fiber.dom) {
+    fiber.dom = createDOM(fiber);
+  }
+
+  //追加到父节点
+  if (fiber.parent) {
+    fiber.parent.dom.append(fiber.dom);
+  }
+
+  //给children新建fiber
+  const elements = fiber.props.children;
+  let prevSibling = null;
+
+  //建立fiber之间的联系，构建Fiber Tree
+  for (let i = 0; i < elements.length; i += 1) {
+    const newFiber = {
+      type: elements[i].type,
+      props: elements[i].props,
+      parent: fiber,
+      dom: null,
+      child: null,
+      sibling: null,
+    };
+
+    //如果是第一个，你就是亲儿子，否则就是兄弟
+    if (i === 0) {
+      fiber.child = newFiber;
+    } else {
+      prevSibling.sibling = newFiber;
+    }
+    prevSibling = newFiber;
+  }
+
+  //返回下一个fiber
+  if (fiber.child) {
+    return fiber.child;
+  }
+  let nextFiber = fiber;
+  while (nextFiber) {
+    if (nextFiber.sibling) {
+      return nextFiber.sibling;
+    }
+    nextFiber = nextFiber.parent;
+  }
+}
 
 export default render;
