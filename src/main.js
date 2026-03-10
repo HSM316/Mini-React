@@ -1,13 +1,21 @@
-import { createElement } from ".";
+import { createElement, render } from ".";
 
 const element = createElement(
   "h1",
   {
     id: "title",
-    class: "hello",
+    style: "background: orange",
   },
   "Hello World",
-  createElement("h2"),
+  createElement(
+    "a",
+    { href: "https://bilibili.com", style: "color: yellow" },
+    "Bilibili",
+  ),
 );
+
+const container = document.querySelector("#root");
+
+render(element, container);
 
 console.log(element);
