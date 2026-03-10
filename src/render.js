@@ -41,6 +41,7 @@ function commitRoot() {
   commitWork(wipRoot.child);
   currentRoot = wipRoot;
   wipRoot = null;
+  commitEffects(currentRoot.child);
 }
 
 function commitWork(fiber) {
@@ -63,6 +64,26 @@ function commitWork(fiber) {
   }
   commitWork(fiber.child);
   commitWork(fiber.sibling);
+}
+
+function commitEffects(fiber) {
+  if (!fiber) return;
+
+  const isFunctionComponent = fiber.type instanceof Function;
+  if (isFunctionComponent && fiber.hooks) {
+    fiber.hooks.forEach((hook) => {
+      if (hook && hook.tag === "effect" && hook.hasChanged) {
+        if (typeof hook.cleanup === "function") {
+          hook.cleanup();
+        }
+        const cleanup = hook.effect();
+        hook.cleanup = typeof cleanup === "function" ? cleanup : undefined;
+      }
+    });
+  }
+
+  commitEffects(fiber.child);
+  commitEffects(fiber.sibling);
 }
 
 function commitDeletion(fiber, domParent) {
@@ -210,6 +231,31 @@ export function useState(initial) {
   wipFiber.hooks.push(hook);
   hookIndex += 1;
   return [hook.state, setState];
+}
+
+export function useEffect(effect, deps) {
+  const oldHook =
+    wipFiber.alternate &&
+    wipFiber.alternate.hooks &&
+    wipFiber.alternate.hooks[hookIndex];
+
+  const hasNoDeps = deps === undefined;
+  const depsChanged =
+    hasNoDeps ||
+    !oldHook ||
+    !oldHook.deps ||
+    deps.some((dep, i) => !Object.is(dep, oldHook.deps[i]));
+
+  const hook = {
+    tag: "effect",
+    deps,
+    effect,
+    cleanup: oldHook && oldHook.cleanup,
+    hasChanged: depsChanged,
+  };
+
+  wipFiber.hooks.push(hook);
+  hookIndex += 1;
 }
 
 function reconcileChildren(wipFiber, elements) {
